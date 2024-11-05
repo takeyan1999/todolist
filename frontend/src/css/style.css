@@ -1,0 +1,24 @@
+:root {
+    /* 色管理用の変数 */
+    --black-color: #333;
+    --primary-color: #0e487f;
+    --subprimary-color: #7794be;
+    --gray-color: #bfbfbf;
+}
+
+/* ---------- base ---------- */
+body {
+    color: var(--black-color);
+    font-size: 16px;
+    font-family: "Open Sans", sans-serif;
+    line-height: 1.75;
+}
+
+/* ---------- container ---------- */
+.bg-body-tertiary {
+    background-color: var(--primary-color) !important ;
+}
+
+.font-color {
+    color: var(--subprimary-color);
+}
