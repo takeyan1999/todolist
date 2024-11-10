@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-// import axios from "axios";
+
 import Container from "react-bootstrap/Container";
 import Nav from "react-bootstrap/Nav";
 import Navbar from "react-bootstrap/Navbar";
@@ -8,24 +8,7 @@ import Col from "react-bootstrap/Col";
 
 import Todoitem from "./components/todoitem";
 
-// type Fruit = {
-//     id: number;
-//     name: string;
-//     icon: string;
-// };
-
 function App() {
-    // const [fruits, setFruits] = useState<Fruit[]>([{ id: 0, name: "", icon: "" }]);
-
-    // useEffect(() => {
-    //     (async () => {
-    //         const data = await axios.get("http://localhost:8080");
-    //         console.log(data.data);
-    //         console.log(data.data[0]);
-    //         setFruits(data.data);
-    //     })();
-    // }, []);
-
     const [currentDate, setCurrentDate] = useState<string>("");
 
     useEffect(() => {
@@ -51,7 +34,7 @@ function App() {
             <Container className="text-center mt-5">
                 <Row>
                     <Col>
-                        <p>今日すること{currentDate}</p>
+                        <p>今日すること</p>
                         <Todoitem currentDate={currentDate} todayflag={true} />
                     </Col>
                     <Col>
@@ -60,15 +43,6 @@ function App() {
                     </Col>
                 </Row>
             </Container>
-
-            {/* // <div>
-        //    {fruits.map((fruit) => (
-        //         <p key={fruit.id}>
-        //             <span>{fruit.name}</span>
-        //             <span>{fruit.icon}</span>
-        //         </p>
-        //     ))}
-        // </div> */}
         </>
     );
 }

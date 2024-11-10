@@ -5,52 +5,156 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
+
+	"github.com/joho/godotenv"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
-
-
 type TodoList struct {
-    ID int `gorm:"primaryKey" json:"id"`
-    Task  string `json:"task"`
-    Priority int `json:"priority"`
-    Status  bool `json:"status"`
-    Deadline string	`json:"deadline"`
-};
-
-
-var TodoItems = []TodoList{
-    { ID: 1, Task: "買い物に行く", Priority: 15, Status: false, Deadline: "2024-11-05" },
-    { ID: 2, Task: "ジムで運動する", Priority: 3, Status: true, Deadline: "2024-11-10" },
-    { ID: 3, Task: "本を読む", Priority: 0, Status: false, Deadline: "2024-11-05"},
-    { ID: 4, Task: "部屋の掃除", Priority: 19, Status: false, Deadline: "2024-11-08" },
-    { ID: 5, Task: "仕事のメールを返信", Priority: 1, Status: true, Deadline: "2024-11-05" },
-    { ID: 6, Task: "友達とランチ", Priority: 0, Status: false, Deadline: "2024-11-15" },
-    { ID: 7, Task: "映画を見る", Priority: 7, Status: false, Deadline: "2024-11-05" },
-    { ID: 8, Task: "週末の予定を立てる", Priority: 12, Status: true, Deadline: "2024-11-12" },
-    { ID: 9, Task: "歯医者の予約を取る", Priority: 8, Status: false, Deadline: "2024-11-05" },
-    { ID: 10, Task: "レシピを考える", Priority: 20, Status: true, Deadline: "2024-11-20" },
-    { ID: 11, Task: "日記を書く", Priority: 0, Status: false, Deadline: "2024-11-05" },
-    { ID: 12, Task: "銀行に行く", Priority: 4, Status: false, Deadline: "2024-11-18" },
-    { ID: 13, Task: "衣替えをする", Priority: 17, Status: true, Deadline: "2024-11-05" },
-    { ID: 14, Task: "プレゼン資料を準備", Priority: 2, Status: false, Deadline: "2024-11-14" },
-    { ID: 15, Task: "植物に水をやる", Priority: 0, Status: false, Deadline: "2024-11-05" },
-    { ID: 16, Task: "ストレッチをする", Priority: 13, Status: true, Deadline: "2024-11-22" },
-    { ID: 17, Task: "新しいレシピを試す", Priority: 5, Status: false, Deadline: "2024-11-05" },
-    { ID: 18, Task: "オンラインコースを受講", Priority: 18, Status: false, Deadline: "2024-11-25" },
-    { ID: 19, Task: "プロジェクトの進捗確認", Priority: 16, Status: true, Deadline: "2024-11-05" },
-    { ID: 20, Task: "部屋の模様替えを考える", Priority: 6, Status: false, Deadline: "2024-11-30" },
-};
-
-// ※Goではコードの記述順序は関係ないので、上に書いても下に書いても構いません。
-func main() {
-	http.HandleFunc("/", getTodoItems)
-	fmt.Println("Starting server at port 8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	ID       int    `gorm:"primaryKey" json:"id"`
+	Task     string `json:"task"`
+	Priority int    `json:"priority"`
+	Status   bool   `json:"status"`
+	Deadline string `json:"deadline"`
 }
 
-func getTodoItems(w http.ResponseWriter, r *http.Request) {
+// TableName メソッドでテーブル名を明示的に指定
+func (TodoList) TableName() string {
+	return "todoitems" // データベース上のテーブル名を指定
+}
+
+var db *gorm.DB
+
+func main() {
+	// .envファイルの読み込み
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	// 環境変数から接続情報を取得
+	username := os.Getenv("DB_USERNAME")
+	password := os.Getenv("DB_PASSWORD")
+	host := os.Getenv("DB_HOST")
+	port := os.Getenv("DB_PORT")
+	dbname := os.Getenv("DB_NAME")
+
+	// DSNの作成
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		username, password, host, port, dbname)
+	fmt.Println("DSN:", dsn)
+
+	// データベース接続
+	var errDB error
+	db, errDB = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if errDB != nil {
+		log.Fatalf("Failed to connect to the database: %v", errDB)
+	} else {
+		log.Println("Database connection established")
+	}
+
+	// テーブルのマイグレーション
+	if err := db.AutoMigrate(&TodoList{}); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+	}
+	log.Println("Database migration completed")
+
+	// エンドポイントの定義
+	http.HandleFunc("/todos",withCORS(func(w http.ResponseWriter, r *http.Request){
+		switch r.Method{
+		case "GET":
+			getTodos(w,r)
+		case "POST":
+			addTodo(w,r)
+		case "DELETE":
+			deleteTodo(w,r)
+		default:
+			http.Error(w, "Method not allow", http.StatusMethodNotAllowed)
+		}
+	}))
+
+	// サーバーの起動
+	log.Println("Server running on port 8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
+	}
+}
+
+// CORS対応ミドルウェア
+func withCORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		
+		// OPTIONSリクエストの場合、ヘッダーのみ返して終了
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// OPTIONS以外のリクエストは次のハンドラに処理を渡す
+		next(w, r)
+	}
+}
+
+// GETリクエストでTodoリストを取得
+func getTodos(w http.ResponseWriter, r *http.Request) {
+	var todos []TodoList
+	result := db.Find(&todos); 
+	if result.Error != nil {
+		http.Error(w, result.Error.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-    // ここにCORS対応コードを追加します。
-	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000") 
-	json.NewEncoder(w).Encode(TodoItems)
+	json.NewEncoder(w).Encode(todos)
+}
+
+// POSTリクエストで新しいTodoを追加
+func addTodo(w http.ResponseWriter, r *http.Request) {
+	var todo TodoList
+	if err := json.NewDecoder(r.Body).Decode(&todo); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if result := db.Create(&todo); result.Error != nil {
+		http.Error(w, result.Error.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(todo)
+}
+
+// DELETEリクエストで指定されたIDのTodoを削除
+func deleteTodo(w http.ResponseWriter, r *http.Request) {
+	
+	// リクエストURLからIDを取得
+	idStr := r.URL.Query().Get("id") // クエリパラメータからIDを取得
+	if idStr == "" {
+		http.Error(w, "ID parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	// IDを整数に変換
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	// 指定されたIDのTodoを削除
+	if result := db.Delete(&TodoList{}, id); result.Error != nil {
+		http.Error(w, result.Error.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// レスポンスを返す
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Todo deleted successfully"))
 }
